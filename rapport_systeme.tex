@@ -1,0 +1,668 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+\geometry{margin=2.5cm}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{parskip}
+
+\definecolor{codeblue}{RGB}{0,90,180}
+
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{\small Système de Tri Automatique de Bouteilles}
+\lhead{\small Rapport Technique}
+\cfoot{\thepage}
+
+\titleformat{\section}{\large\bfseries\color{codeblue}}{\thesection}{1em}{}[\titlerule]
+\titleformat{\subsection}{\normalsize\bfseries}{\thesubsection}{1em}{}
+
+\begin{document}
+
+% ============================================================
+\begin{titlepage}
+  \centering
+  \vspace*{3cm}
+  {\Huge\bfseries Système de Tri Automatique\\[0.5em]
+  de Bouteilles PET\par}
+  \vspace{1.5cm}
+  {\large Rapport Technique\par}
+  \vspace{0.5cm}
+  \rule{10cm}{0.4pt}\\[0.8em]
+  {\normalsize Architecture logicielle et protocoles de communication\par}
+  \vspace{1cm}
+  {\small Date : \today}
+  \vfill
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+% ============================================================
+\section{Vue d'ensemble du système}
+
+Le système est composé de quatre composants qui communiquent en chaîne :
+
+\vspace{0.8em}
+\begin{center}
+\begin{tikzpicture}[
+  node distance=1.6cm,
+  box/.style={rectangle, rounded corners, draw=codeblue, fill=blue!7,
+              minimum width=3.2cm, minimum height=1cm, align=center, font=\small},
+  arr/.style={->, >=Stealth, thick, draw=gray},
+]
+  \node[box] (py)    {Script Python\\(détection CV)};
+  \node[box, right=2cm of py]   (back)  {Backend\\Node.js};
+  \node[box, right=2cm of back] (front) {Frontend\\React};
+  \node[box, below=1.5cm of py] (ard)   {Arduino\\Mega 2560};
+
+  \draw[arr] (py)   -- node[above,font=\tiny\itshape]{JSON / CSV} (back);
+  \draw[arr] (back) -- node[above,font=\tiny\itshape]{HTTP REST}  (front);
+  \draw[arr, bend right=20] (py)  -- node[right,font=\tiny\itshape]{ACC / REJ}   (ard);
+  \draw[arr, bend left=20]  (ard) -- node[left,font=\tiny\itshape]{``Finished''} (py);
+\end{tikzpicture}
+\end{center}
+
+\vspace{0.5em}
+\begin{center}
+\begin{tabular}{llll}
+\toprule
+\textbf{Composant} & \textbf{Technologie} & \textbf{Rôle principal} & \textbf{Adresse} \\
+\midrule
+Script Python  & Python 3 + YOLO + Keras & Détection et décision  & --      \\
+Arduino        & C++ (Mega 2560)          & Actionneurs mécaniques & COM6    \\
+Backend API    & Node.js + Express        & Pont de données        & :5000   \\
+Frontend       & React + TypeScript + Vite& Interface utilisateur  & :8080   \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% ============================================================
+\section{Script Python -- Détection et Décision}
+
+\subsection{Traitement vidéo}
+
+Le script analyse en continu le flux webcam (1280$\times$720, 30 fps) dans un
+\textbf{thread GPU dédié} pour ne pas bloquer l'affichage. Chaque frame suit le
+pipeline suivant :
+
+\begin{enumerate}[noitemsep]
+  \item \textbf{Passe 1 (YOLO)} : détection et tracking des bouteilles sur la frame complète.
+  \item \textbf{Passe 2 (YOLO)} : détection du bouchon sur un crop de la bouteille avec un
+        padding de 20 px en haut et sur les côtés.
+  \item \textbf{CNN ResNet50V2} : classification Remplie / Vide sur le crop 224$\times$224.
+  \item \textbf{Lissage} : vote majoritaire sur les 15 dernières frames pour chaque label.
+  \item \textbf{Décision} : envoi de la commande à l'Arduino dès que les deux labels sont verrouillés.
+\end{enumerate}
+
+\subsection{Modèles d'intelligence artificielle}
+
+\begin{center}
+\begin{tabular}{p{3cm} p{5.5cm} p{4.5cm}}
+\toprule
+\textbf{Modèle} & \textbf{Rôle} & \textbf{Classes détectées} \\
+\midrule
+YOLOv8         & Détection bouteille et bouchon    & Bouteille, Avec bouchon, Sans bouchon \\
+CNN ResNet50V2 & Classification remplissage        & Remplie, Vide \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Lissage et critère de validation}
+
+Pour éviter les fausses détections, chaque label est soumis à un \textbf{vote sur
+15 frames} avant d'être verrouillé définitivement :
+
+\begin{itemize}[noitemsep]
+  \item \textbf{Remplissage} : bouteille déclarée REMPLIE si $\geq 5$ votes sur 15.
+  \item \textbf{Bouchon} : déclaré PRÉSENT si $\geq 8$ votes sur 15.
+\end{itemize}
+
+Une bouteille est \textbf{acceptée} uniquement si elle est \textit{vide} \textbf{et}
+\textit{sans bouchon}. Dans le cas contraire, elle est rejetée.
+
+% ============================================================
+\section{Liaison Arduino}
+
+\subsection{Connexion série}
+
+La connexion est établie automatiquement au démarrage du script. Le programme
+parcourt les ports COM disponibles et identifie l'Arduino via des mots-clés
+(\textit{arduino}, \textit{ch340}, \textit{ftdi}). Les ports Bluetooth sont
+ignorés. La communication utilise un débit de \textbf{9600 bauds}.
+
+\subsection{Protocole de commande}
+
+\begin{center}
+\begin{tabular}{p{3.5cm} p{3.5cm} p{6cm}}
+\toprule
+\textbf{Direction} & \textbf{Message} & \textbf{Signification} \\
+\midrule
+Python $\to$ Arduino & \texttt{ACC} & Bouteille valide : lancer le cycle de broyage \\
+Python $\to$ Arduino & \texttt{REJ} & Bouteille refusée : actionner l'éjection \\
+Arduino $\to$ Python & \texttt{Finished} & Cycle de broyage terminé \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Suivi du cycle de broyage}
+
+Lors de l'envoi de \texttt{ACC}, un \textbf{thread d'écoute} démarre et attend
+la réponse \texttt{Finished} de l'Arduino. La durée du cycle est calculée et
+stockée dans le fichier JSON partagé. Une seule opération peut être en cours à
+la fois (flag \texttt{ready}).
+
+\subsection{Traçabilité CSV}
+
+À chaque décision, une ligne est enregistrée dans le fichier
+\texttt{detection\_unifie.csv} (Google Drive) :
+
+\begin{center}
+\begin{tabular}{lllll}
+\toprule
+Timestamp & ID Bouteille & État remplissage & Bouchon présent & Statut \\
+\midrule
+2026-04-27 10:30:00 & 3 & VIDE & NON & ACCEPTEE \\
+2026-04-27 10:32:15 & 4 & REMPLIE & OUI & REJETEE \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% ============================================================
+\section{Interface Frontend -- Backend}
+
+\subsection{API REST (Node.js / Express)}
+
+Le backend expose trois endpoints principaux sur le port \textbf{5000} :
+
+\begin{center}
+\begin{tabular}{p{4cm} p{2cm} p{7cm}}
+\toprule
+\textbf{Endpoint} & \textbf{Méthode} & \textbf{Données retournées} \\
+\midrule
+\texttt{/status}           & GET & Statut temps-réel de la bouteille (existe, remplie, bouchon, valide) \\
+\texttt{/csv-stats}        & GET & Statistiques agrégées (total, aujourd'hui, poids, CO\textsubscript{2}) + dernière bouteille \\
+\texttt{/broyage-finished} & GET & État du broyage (terminé ou non) + durée en ms \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Le backend lit en temps réel deux fichiers produits par Python :
+\texttt{realtime\_status.json} (statut par frame) et \texttt{detection\_unifie.csv}
+(historique des bouteilles acceptées).
+
+\subsection{Interface utilisateur React}
+
+L'interface tourne sur le port \textbf{8080} et présente :
+
+\begin{itemize}[noitemsep]
+  \item Les \textbf{statistiques} : nombre total de bouteilles, bouteilles du jour,
+        poids recyclé, CO\textsubscript{2} économisé.
+  \item Le \textbf{niveau de stockage} PET Transparent (jauge sur 100 bouteilles).
+  \item Les \textbf{indicateurs de validation} : Plastique PET / Bouteille vide / Sans bouchon.
+  \item Le \textbf{timer de broyage} en temps réel (résolution 100 ms).
+  \item Une \textbf{notification de résultat} (verte si acceptée, rouge si refusée)
+        avec message personnalisé et bouton OK.
+\end{itemize}
+
+\subsection{Machine à états et flux temporel}
+
+\begin{center}
+\begin{tikzpicture}[
+  state/.style={ellipse, draw=codeblue, fill=blue!7,
+                minimum width=2.4cm, minimum height=0.9cm,
+                align=center, font=\small},
+  arr/.style={->, >=Stealth, draw=gray},
+]
+  \node[state] (idle) {\texttt{idle}};
+  \node[state, right=2.5cm of idle] (det) {\texttt{detecting}};
+  \node[state, above right=1.2cm and 2cm of det] (val) {\texttt{valid}};
+  \node[state, below right=1.2cm and 2cm of det] (inv) {\texttt{invalid}};
+
+  \draw[arr] (idle) -- node[above,font=\tiny\itshape]{Démarrer} (det);
+  \draw[arr] (det)  -- node[above left,font=\tiny\itshape]{OK} (val);
+  \draw[arr] (det)  -- node[below left,font=\tiny\itshape]{Refus} (inv);
+  \draw[arr, bend left=35]  (val) to node[above,font=\tiny\itshape]{OK} (idle);
+  \draw[arr, bend right=35] (inv) to node[below,font=\tiny\itshape]{OK} (idle);
+\end{tikzpicture}
+\end{center}
+
+\begin{enumerate}[noitemsep]
+  \item Clic \textbf{Démarrer} : polling de \texttt{/status} toutes les 350 ms.
+  \item Bouteille détectée : attente de \textbf{2 secondes} (verrouillage des labels côté Python).
+  \item Lecture de \texttt{/csv-stats} pour récupérer la décision finale.
+  \item Si \textbf{valide} : timer broyage + polling \texttt{/broyage-finished} toutes les 800 ms.
+  \item Si \textbf{refusée} : notification rouge avec raison précise (bouchon / remplie / les deux).
+  \item Clic \textbf{OK} : rechargement de la page, retour à l'état initial.
+\end{enumerate}
+
+% ============================================================
+\section{Synthèse}
+
+\begin{center}
+\begin{tabular}{p{4cm} p{9.5cm}}
+\toprule
+\textbf{Point clé} & \textbf{Description} \\
+\midrule
+Robustesse          & Vote sur 15 frames + hystérésis CNN éliminent les faux positifs \\
+Découplage          & Python produit des fichiers, Node.js les lit, React les affiche
+                      -- aucune dépendance directe \\
+Traçabilité         & Chaque bouteille est enregistrée avec horodatage dans le CSV \\
+Réactivité          & Polling multi-fréquence selon la phase (350 ms / 800 ms / 100 ms) \\
+Sécurité mécanique  & Une seule commande Arduino à la fois grâce au flag \texttt{ready} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\end{document}
+
+
+\definecolor{codeblue}{RGB}{0,100,200}
+\definecolor{codegray}{RGB}{100,100,100}
+\definecolor{codegreen}{RGB}{0,140,0}
+\definecolor{codebg}{RGB}{248,248,248}
+
+\lstset{
+  backgroundcolor=\color{codebg},
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{codeblue}\bfseries,
+  commentstyle=\color{codegreen},
+  stringstyle=\color{orange},
+  frame=single,
+  rulecolor=\color{gray!40},
+  breaklines=true,
+  numbers=left,
+  numberstyle=\tiny\color{codegray},
+  xleftmargin=1.5em,
+}
+
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{Système de Tri Automatique de Bouteilles}
+\lhead{Rapport Technique}
+\cfoot{\thepage}
+
+\titleformat{\section}{\large\bfseries\color{codeblue}}{{\thesection}}{1em}{}[\titlerule]
+\titleformat{\subsection}{\normalsize\bfseries}{{\thesubsection}}{1em}{}
+
+\begin{document}
+
+% ============================================================
+%  PAGE DE TITRE
+% ============================================================
+\begin{titlepage}
+  \centering
+  \vspace*{2cm}
+  {\Huge\bfseries Rapport Technique\\[0.4em]
+  Système de Tri Automatique de Bouteilles\par}
+  \vspace{1.5cm}
+  {\large Interface Python -- Liaison Arduino\\[0.3em]
+         Interface Frontend -- Backend\par}
+  \vspace{2cm}
+  \rule{10cm}{0.5pt}\\[0.5em]
+  {\normalsize Architecture logicielle, flux de données et protocoles de communication\par}
+  \vspace{1cm}
+  {\small Date : \today}
+  \vfill
+\end{titlepage}
+
+% ============================================================
+%  TABLE DES MATIÈRES
+% ============================================================
+\tableofcontents
+\newpage
+
+% ============================================================
+%  1. VUE D'ENSEMBLE
+% ============================================================
+\section{Vue d'ensemble du système}
+
+Le système est composé de trois couches logicielles indépendantes qui communiquent
+via fichiers partagés et requêtes HTTP :
+
+\vspace{0.5em}
+\begin{center}
+\begin{tikzpicture}[
+  node distance=1.5cm,
+  box/.style={rectangle, rounded corners, draw=codeblue, fill=blue!8,
+              minimum width=3.8cm, minimum height=1cm, align=center, font=\small},
+  arr/.style={->, >=Stealth, thick},
+]
+  \node[box] (py)  {Script Python\\(\texttt{unified\_bottle\_detection.py})};
+  \node[box, right=2.5cm of py] (back) {Backend Node.js\\(\texttt{server.js})};
+  \node[box, right=2.5cm of back] (front) {Frontend React\\(\texttt{useRecyclingMachine.ts})};
+  \node[box, below=1.8cm of py] (ard)  {Arduino Mega 2560\\(COM6 -- 9600 baud)};
+
+  \draw[arr] (py) -- node[above,font=\tiny]{JSON / CSV} (back);
+  \draw[arr] (back) -- node[above,font=\tiny]{HTTP REST} (front);
+  \draw[arr, bend right=25] (py) -- node[right,font=\tiny]{ACC / REJ} (ard);
+  \draw[arr, bend left=25]  (ard) -- node[left,font=\tiny]{``Finished''} (py);
+\end{tikzpicture}
+\end{center}
+
+\vspace{0.5em}
+\begin{center}
+\begin{tabular}{llll}
+\toprule
+\textbf{Composant} & \textbf{Technologie} & \textbf{Rôle} & \textbf{Port/Chemin} \\
+\midrule
+Python CV       & Python 3 + YOLO + Keras & Détection + décision & -- \\
+Arduino         & C++ (Arduino Mega)       & Actionneurs mécaniques & COM6 \\
+Backend API     & Node.js + Express        & Pont données          & :5000 \\
+Frontend        & React + TypeScript + Vite& Interface utilisateur  & :8080 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% ============================================================
+%  2. INTERFACE PYTHON
+% ============================================================
+\section{Interface Python -- Détection et Décision}
+
+\subsection{Architecture de traitement vidéo}
+
+Le script \texttt{unified\_bottle\_detection.py} implémente une détection en
+\textbf{double passe} sur chaque frame webcam, exécutée dans un thread GPU dédié
+(\texttt{\_detection\_worker}) afin de ne pas bloquer l'affichage.
+
+\begin{center}
+\begin{tikzpicture}[
+  node distance=0.9cm,
+  flowstep/.style={rectangle, rounded corners, draw=gray, fill=gray!10,
+               minimum width=5cm, minimum height=0.7cm, align=center, font=\small},
+  arr/.style={->, >=Stealth},
+]
+  \node[flowstep] (cam)   {Capture webcam (1280$\times$720, 30 fps)};
+  \node[flowstep, below of=cam] (p1)   {Passe 1 -- YOLO : tracking bouteilles (classe 0)};
+  \node[flowstep, below of=p1]  (p2)   {Passe 2 -- YOLO : détection bouchon (crop + padding 20 px)};
+  \node[flowstep, below of=p2]  (cnn)  {CNN ResNet50V2 : classification Remplie / Vide (224$\times$224)};
+  \node[flowstep, below of=cnn] (lock) {Lissage 15 frames + verrouillage global};
+  \node[flowstep, below of=lock](dec)  {Décision ACC / REJ + écriture CSV + JSON};
+
+  \draw[arr] (cam) -- (p1);
+  \draw[arr] (p1)  -- (p2);
+  \draw[arr] (p2)  -- (cnn);
+  \draw[arr] (cnn) -- (lock);
+  \draw[arr] (lock)-- (dec);
+\end{tikzpicture}
+\end{center}
+
+\subsection{Modèles utilisés}
+
+\begin{tabular}{p{3.5cm} p{4.5cm} p{5cm}}
+\toprule
+\textbf{Modèle} & \textbf{Fichier} & \textbf{Rôle} \\
+\midrule
+YOLOv8 (best.pt) & \texttt{Bottle-Bottle-Cap-Detection-System-main/best.pt}
+  & Détection bouteille + bouchon. 3 classes : Bottle, Avec Bouchon, Sans Bouchon \\
+\addlinespace
+CNN ResNet50V2 & \texttt{remplie ou non/artifacts/models/best\_resnet50v2.keras}
+  & Classification binaire Remplie / Vide. Score sigmoid : $\approx 0$ = remplie, $\approx 1$ = vide \\
+\bottomrule
+\end{tabular}
+
+\subsection{Lissage temporel et verrouillage}
+
+Pour éviter les oscillations de détection, les deux labels (remplissage et bouchon)
+sont soumis à un \textbf{vote majoritaire sur 15 frames consécutives} :
+
+\begin{lstlisting}[language=Python, caption={Vote majoritaire bouchon}]
+self.global_cap_history.append(1 if cap_this_bottle else 0)
+if len(self.global_cap_history) >= 15:
+    self.global_cap_locked_value = sum(self.global_cap_history) >= 8
+    self.global_cap_locked = True   # Verrou definitif
+\end{lstlisting}
+
+Seuils appliqués :
+\begin{itemize}[noitemsep]
+  \item \textbf{Remplissage} : REMPLIE si $\geq 5$ votes sur 15 (seuil bas pour sensibilité).
+  \item \textbf{Bouchon} : AVEC si $\geq 8$ votes sur 15 (seuil médian).
+  \item \textbf{Hystérésis CNN} : seuil 0.50 (VIDE$\to$REMPLIE) / 0.72 (REMPLIE$\to$VIDE).
+\end{itemize}
+
+Une fois verrouillés, les labels ne changent plus jusqu'à disparition de la bouteille
+(grace period de 8 frames sans détection avant reset).
+
+\subsection{Critère de validation}
+
+\[
+  \text{Bouteille acceptée} \iff \texttt{global\_locked\_label} = \text{VIDE}
+  \;\wedge\; \texttt{global\_cap\_locked\_value} = \texttt{False}
+\]
+
+Si le critère est satisfait : envoi \texttt{ACC\textbackslash n} à l'Arduino.
+Sinon : envoi \texttt{REJ\textbackslash n}.
+
+% ============================================================
+%  3. LIAISON ARDUINO
+% ============================================================
+\section{Liaison Arduino}
+
+\subsection{Initialisation de la connexion série}
+
+La connexion est établie dans \texttt{init\_arduino()} :
+
+\begin{lstlisting}[language=Python, caption={Connexion série Arduino}]
+self.arduino_serial = serial.Serial(
+    port=arduino_port,   # auto-detection parmi les ports COM
+    baudrate=9600,
+    timeout=1
+)
+time.sleep(2)  # Attente reset Arduino apres ouverture port
+\end{lstlisting}
+
+La détection automatique du port cherche les mots-clés :
+\texttt{arduino}, \texttt{ch340}, \texttt{usb serial}, \texttt{ftdi}.
+Les ports Bluetooth sont ignorés.
+
+\subsection{Protocole de communication}
+
+\begin{center}
+\begin{tabular}{p{3cm} p{4cm} p{6cm}}
+\toprule
+\textbf{Direction} & \textbf{Message} & \textbf{Signification} \\
+\midrule
+Python $\to$ Arduino & \texttt{ACC\textbackslash n} & Bouteille valide : démarrer le cycle de broyage \\
+Python $\to$ Arduino & \texttt{REJ\textbackslash n} & Bouteille refusée : éjection \\
+Arduino $\to$ Python & \texttt{Finished}            & Cycle de broyage terminé \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Suivi de la durée de broyage}
+
+\begin{lstlisting}[language=Python, caption={Tracking du cycle de broyage}]
+# Envoi ACC + demarrage chronometre
+self.arduino_serial.write(b'ACC\n')
+self.broyage_start_time = time.time()
+self.broyage_finished = False
+
+# Thread en attente de "Finished"
+threading.Thread(target=self.wait_for_finished, daemon=True).start()
+
+# Dans wait_for_finished() :
+if feedback == "Finished":
+    self.broyage_duration_ms = round(
+        (time.time() - self.broyage_start_time) * 1000
+    )
+    self.broyage_finished = True
+    self.ready = True
+\end{lstlisting}
+
+Les champs \texttt{broyage\_finished} et \texttt{broyage\_duration\_ms} sont
+écrits dans \texttt{data\_logs/realtime\_status.json} à chaque frame.
+
+\subsection{Écriture CSV}
+
+À chaque bouteille avec labels verrouillés, une ligne est ajoutée au fichier
+\texttt{G:\textbackslash Mon Drive\textbackslash csv file robotique\textbackslash detection\_unifie.csv} :
+
+\begin{lstlisting}[caption={En-tête CSV}]
+Timestamp, ID_Bouteille, Etat_Remplissage, Bouteille_Avec_Bouchon, Statut
+\end{lstlisting}
+
+\texttt{Statut} vaut \texttt{ACCEPTEE} ou \texttt{REJETEE}.
+
+% ============================================================
+%  4. INTERFACE FRONTEND -- BACKEND
+% ============================================================
+\section{Interface Frontend -- Backend}
+
+\subsection{API REST Backend (Node.js / Express)}
+
+Le backend tourne sur \texttt{http://localhost:5000} et expose 4 endpoints :
+
+\begin{center}
+\begin{tabular}{p{3.5cm} p{2cm} p{7.5cm}}
+\toprule
+\textbf{Endpoint} & \textbf{Méthode} & \textbf{Description} \\
+\midrule
+\texttt{/status}           & GET & Lit \texttt{realtime\_status.json} et retourne le statut
+                                    temps-réel de la bouteille. \\
+\addlinespace
+\texttt{/csv-stats}        & GET & Lit \texttt{detection\_unifie.csv} et retourne les
+                                    statistiques agrégées + \texttt{lastBottle}. \\
+\addlinespace
+\texttt{/broyage-finished} & GET & Retourne \texttt{\{finished, durationMs\}} depuis le JSON. \\
+\addlinespace
+\texttt{/detect}           & POST & (non utilisé en production) Spawn du script Python. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsubsection*{Réponse type de \texttt{/status}}
+\begin{lstlisting}[language=JavaScript]
+{
+  "bottleExists": true,
+  "isFilled": false,
+  "hasCap": false,
+  "valid": true,
+  "rejectionReason": null,
+  "numBottles": 1
+}
+\end{lstlisting}
+
+\subsubsection*{Réponse type de \texttt{/csv-stats}}
+\begin{lstlisting}[language=JavaScript]
+{
+  "totalBottles": 42,  "todayBottles": 5,
+  "totalWeight": 1.26, "co2Saved": 3.15,
+  "transparentCount": 42, "coloredCount": 0,
+  "lastBottle": { "isFilled": false, "hasCap": false,
+                  "valid": true, "timestamp": "2026-04-27 10:30:00" }
+}
+\end{lstlisting}
+
+\subsection{Hook React \texttt{useRecyclingMachine}}
+
+Le hook centralise toute la logique de l'interface utilisateur. Il gère une
+machine à états avec les états suivants :
+
+\begin{center}
+\begin{tikzpicture}[
+  state/.style={ellipse, draw=codeblue, fill=blue!8,
+                minimum width=2.2cm, minimum height=0.8cm,
+                align=center, font=\small},
+  arr/.style={->, >=Stealth, font=\tiny},
+]
+  \node[state] (idle)      {\texttt{idle}};
+  \node[state, right=2cm of idle] (det) {\texttt{detecting}};
+  \node[state, above right=1cm and 2cm of det] (val) {\texttt{valid}};
+  \node[state, below right=1cm and 2cm of det] (inv) {\texttt{invalid}};
+
+  \draw[arr] (idle) -- node[above]{clic ``Démarrer''} (det);
+  \draw[arr] (det)  -- node[above left]{bouteille OK} (val);
+  \draw[arr] (det)  -- node[below left]{refusée/absente} (inv);
+  \draw[arr, bend left=40] (val) to node[above]{OK (reload)} (idle);
+  \draw[arr, bend right=40] (inv) to node[below]{OK (reload)} (idle);
+\end{tikzpicture}
+\end{center}
+
+\subsection{Flux temporel complet}
+
+\begin{enumerate}[noitemsep]
+  \item Clic \textbf{Démarrer} $\to$ \texttt{status = 'detecting'} + démarrage polling
+        \texttt{/status} toutes les \textbf{350 ms}.
+  \item Dès que \texttt{bottleExists = true} $\to$ \textbf{attente 2 secondes}
+        (Python verrouille les labels et écrit le CSV).
+  \item Appel \texttt{/csv-stats} : récupération \texttt{lastBottle} + mise à jour stats.
+  \item \textbf{Si valide} : démarrage timer 100 ms (affichage chrono)
+        + polling \texttt{/broyage-finished} toutes les \textbf{800 ms}.
+  \item Dès que \texttt{finished = true} : arrêt timers, affichage notification verte
+        avec durée + bouton OK.
+  \item \textbf{Si refusée} : \texttt{status = 'invalid'}, affichage notification rouge
+        personnalisée (bouchon / remplie / les deux) + bouton OK.
+  \item Clic OK $\to$ \texttt{window.location.reload()}.
+\end{enumerate}
+
+\subsection{Paramètres de timing}
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+\textbf{Paramètre} & \textbf{Valeur} \\
+\midrule
+Délai avant lecture CSV      & 2\,000 ms \\
+Polling \texttt{/status}     & 350 ms \\
+Polling \texttt{/broyage-finished} & 800 ms \\
+Timer chrono broyage         & 100 ms \\
+Timeout global détection     & 15\,000 ms \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% ============================================================
+%  5. FICHIERS D'ÉCHANGE
+% ============================================================
+\section{Fichiers d'échange entre les couches}
+
+\begin{center}
+\begin{tabular}{p{5.5cm} p{2.5cm} p{6cm}}
+\toprule
+\textbf{Fichier} & \textbf{Format} & \textbf{Contenu} \\
+\midrule
+\texttt{data\_logs/realtime\_status.json}
+  & JSON & Statut temps-réel : \texttt{bouteille\_existe},
+    \texttt{bouteille\_remplie}, \texttt{bouteille\_avec\_bouchon},
+    \texttt{broyage\_finished}, \texttt{broyage\_duration\_ms} \\
+\addlinespace
+\texttt{G:\textbackslash{}Mon Drive\textbackslash{}...\quad detection\_unifie.csv}
+  & CSV & Historique des bouteilles : horodatage, ID, remplissage,
+    bouchon, statut (ACCEPTEE/REJETEE) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Le JSON est écrit à \textbf{chaque frame} (environ 30 fps), le CSV uniquement
+lors du verrouillage des labels (une ligne par bouteille).
+
+% ============================================================
+%  6. RÉSUMÉ
+% ============================================================
+\section{Résumé}
+
+\begin{center}
+\begin{tabular}{p{4cm} p{9.5cm}}
+\toprule
+\textbf{Point fort} & \textbf{Description} \\
+\midrule
+Robustesse détection     & Vote 15 frames + hystérésis CNN évitent les faux positifs \\
+Découplage des couches   & Python écrit fichiers $\to$ Node.js lit $\to$ React affiche,
+                           sans dépendance directe \\
+Réactivité UI            & Polling asynchrone multi-fréquence selon la phase du cycle \\
+Traçabilité              & CSV persistant sur Google Drive avec horodatage \\
+Sécurité mécanique       & Arduino ne reçoit une commande que si \texttt{ready = True}
+                           (une seule opération à la fois) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\end{document}

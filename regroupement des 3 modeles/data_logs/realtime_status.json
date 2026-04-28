@@ -1,0 +1,9 @@
+{
+  "timestamp": "2026-04-27 18:55:00.527",
+  "bouteille_existe": "NON",
+  "nombre_bouteilles": 0,
+  "bouteille_remplie": "NON",
+  "bouteille_avec_bouchon": "NON",
+  "broyage_finished": false,
+  "broyage_duration_ms": null
+}

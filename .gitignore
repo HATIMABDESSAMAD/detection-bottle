@@ -1,0 +1,36 @@
+# Modèles trop lourds pour GitHub (> 100 MB)
+*.keras
+*.h5
+
+# Dépendances
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Dossiers de copies inutiles
+regroupement des 3 modeles - Copie/
+regroupement des 3 modeles - Copie (2)/
+
+# Données générées
+results/
+screenshots/
+videos/
+data_logs/*.csv
+
+# Fichiers système
+.DS_Store
+Thumbs.db
+*.log
+
+# Variables d'environnement
+.env
+.env.local
+
+# Build frontend
+bottle-buddy-bot/bottle-buddy-bot/dist/
+
+# Fichiers temporaires
+*.tmp
+*.temp
