@@ -378,12 +378,4 @@ Ce projet est sous licence **MIT** - voir [LICENSE](LICENSE) pour détails.
 
 ---
 
-## 📞 Support et Contact
-
-- 📧 Email: hatim.abdessamad@email.com
-- 🐛 Issues: [GitHub Issues](https://github.com/HATIMABDESSAMAD/detection-bottle/issues)
-- 💬 Discussions: [GitHub Discussions](https://github.com/HATIMABDESSAMAD/detection-bottle/discussions)
-
----
-
 **Merci d'utiliser Unified Bottle Detection System! 🍶**
