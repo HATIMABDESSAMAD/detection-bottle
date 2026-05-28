@@ -4,10 +4,6 @@ Merci d'avoir l'intérêt de contribuer à **Unified Bottle Detection System** !
 
 Ce document fournit les directives et instructions pour contribuer au projet.
 
-## 📋 Code of Conduct
-
-Ce projet et tous les contributeurs sont soumis au [Code of Conduct](CODE_OF_CONDUCT.md). En participant, vous acceptez d'adhérer à ces normes.
-
 ## 🚀 Comment Commencer
 
 ### 1. Fork et Clone
@@ -36,10 +32,11 @@ git checkout -b feature/ma-fonctionnalite
 ### 3. Développer et Tester
 ```bash
 # Installer les dépendances
-pip install -r requirements.txt
+pip install -r regroupement\ des\ 3\ modeles/requirements.txt
 
 # Faire vos modifications
 # Tester localement
+cd regroupement\ des\ 3\ modeles
 python unified_bottle_detection.py --help
 ```
 
@@ -129,25 +126,12 @@ def calculate_fill_percentage(bottle_mask, water_mask):
     return min(percentage, 100.0)
 ```
 
-### Comments
-```python
-# ✅ BON: Commentaires clairs et utiles
-# ❌ MAUVAIS: Commentaires évidents ou inutiles
-
-# BON
-# Use exponential moving average for temporal smoothing
-smoothed_value = alpha * current_value + (1 - alpha) * smoothed_value
-
-# MAUVAIS
-# Add x to y
-result = x + y
-```
-
 ---
 
 ## 🧪 Tests
 
-### Ajouter des tests
+Écrire des tests pour les nouvelles fonctionnalités :
+
 ```python
 # tests/test_detection.py
 import pytest
@@ -158,154 +142,18 @@ def test_model_initialization():
     system = UnifiedBottleDetection()
     assert system.model_detection is not None
     assert system.model_segmentation is not None
-
-def test_confidence_range():
-    """Test que les seuils de confiance sont valides"""
-    system = UnifiedBottleDetection()
-    assert 0.0 <= system.confidence_detection <= 1.0
-    assert 0.0 <= system.confidence_segmentation <= 1.0
-```
-
-### Exécuter les tests
-```bash
-pytest tests/ -v
-pytest tests/ -v --cov=.  # Avec couverture de code
 ```
 
 ---
 
 ## 📖 Documentation
 
-### Mettre à jour la documentation
+Mettre à jour la documentation pertinente :
 
 1. **README.md** : Pour les utilisateurs finaux
 2. **Code comments** : Pour les développeurs
 3. **Docstrings** : Pour l'API
 4. **CHANGELOG.md** : Pour l'historique des versions
-
-### Template de docstring
-```python
-def function_name(param1, param2):
-    """
-    Short description (une ligne).
-    
-    Longer description if needed (optionnel).
-    
-    Args:
-        param1 (type): Description du param1
-        param2 (type): Description du param2
-    
-    Returns:
-        type: Description de la valeur retournée
-    
-    Raises:
-        ExceptionType: Quand cette exception est levée
-    
-    Examples:
-        >>> function_name(10, 20)
-        30
-    """
-    pass
-```
-
----
-
-## 🔍 Processus de Review
-
-### Ce que nous regardons dans une PR:
-
-✅ **Code Quality**
-- Style conforme
-- Pas de code dupliqué
-- Fonction unique et claire
-- Performance raisonnable
-
-✅ **Correctness**
-- Pas de bugs évidents
-- Gestion des erreurs
-- Cas limites traités
-
-✅ **Testing**
-- Tests unitaires suffisants
-- Code coverage > 80% pour les nouvelles fonctions
-- Tests passent localement et en CI
-
-✅ **Documentation**
-- Docstrings présentes
-- README mis à jour si pertinent
-- Changements importants documentés
-
-✅ **Compatibility**
-- Compatible avec Python 3.8+
-- Pas de breaking changes
-- Dépendances justifiées
-
-### Checklist avant de soumettre:
-- [ ] Code suit PEP 8
-- [ ] Tests écrits et passants
-- [ ] Docstrings ajoutées
-- [ ] README/Documentation mis à jour
-- [ ] Commits squashés et bien nommés
-- [ ] Aucune dépendance non nécessaire ajoutée
-
----
-
-## 🐛 Signaler des Bugs
-
-### Template d'Issue
-```markdown
-**Description**
-Description claire et concise du bug
-
-**Étapes pour reproduire**
-1. ...
-2. ...
-3. ...
-
-**Comportement attendu**
-Ce qui devrait se passer
-
-**Comportement actuel**
-Ce qui se passe réellement
-
-**Environnement**
-- Python: 3.9
-- PyTorch: 2.0
-- CUDA: 11.8
-- OS: Windows 11
-- GPU: RTX 3070
-
-**Logs/Erreurs**
-```python
-Traceback (most recent call last):
-  File ...
-```
-
-**Screenshots**
-[Si applicable]
-
-**Contexte supplémentaire**
-[Toute information pertinente]
-```
-
----
-
-## 💡 Suggérer des Améliorations
-
-### Template de Feature Request
-```markdown
-**Description du problème**
-Contexte du problème
-
-**Solution proposée**
-Comment tu aimerais résoudre ça
-
-**Alternatives envisagées**
-Autres approches possibles
-
-**Context supplémentaire**
-Screenshots, liens, références, etc.
-```
 
 ---
 
@@ -315,18 +163,16 @@ Screenshots, liens, références, etc.
 ```bash
 # ❌ MAUVAIS
 git commit -m "updates"
-git push -f origin main
 
 # ✅ BON
 git commit -m "feat(tracking): improve ID stability with IOU threshold"
-git push origin feature/improved-tracking
 ```
 
 ### Code
 ```python
 # ❌ MAUVAIS
 def process(img):
-    # ... 200 lignes de code ...
+    # ... 200 lignes ...
     return result
 
 # ✅ BON
@@ -335,53 +181,7 @@ def process_image(image):
     detections = detect_objects(image)
     classifications = classify_detections(detections)
     return merge_results(detections, classifications)
-
-def detect_objects(image):
-    """Separate function with single responsibility."""
-    pass
-
-def classify_detections(detections):
-    """Separate function with single responsibility."""
-    pass
 ```
-
-### Documentation
-```markdown
-# ❌ MAUVAIS
-## Utilisation
-Utilise comme ça.
-
-# ✅ BON
-## Usage
-
-### Basic Usage
-```python
-from unified_bottle_detection import UnifiedBottleDetection
-
-system = UnifiedBottleDetection()
-system.run_from_video("video.mp4")
-```
-
-### Advanced Configuration
-...
-```
-
----
-
-## 🚀 Versions et Releases
-
-### Semantic Versioning (SemVer)
-Format: `MAJOR.MINOR.PATCH`
-
-- **MAJOR**: Breaking changes (v1.0.0 → v2.0.0)
-- **MINOR**: Nouvelles features (v1.0.0 → v1.1.0)
-- **PATCH**: Bug fixes (v1.0.0 → v1.0.1)
-
-### Release Process
-1. Mettre à jour `CHANGELOG.md`
-2. Créer un tag (ex: `v1.1.0`)
-3. Publier sur GitHub Releases
-4. Publier sur PyPI (si applicable)
 
 ---
 
@@ -398,23 +198,3 @@ Format: `MAJOR.MINOR.PATCH`
 Votre contribution rend ce projet meilleur pour tous! 🌟
 
 **Happy Coding!** 🚀
-- Update documentation as needed
-- Ensure all tests pass
-
-## Testing
-
-```bash
-# Run tests
-python -m pytest
-
-# Run specific test file
-python -m pytest tests/test_filename.py
-```
-
-## Questions?
-
-Feel free to open an Issue or contact the maintainers.
-
-## License
-
-By contributing, you agree that your contributions will be licensed under the MIT License.

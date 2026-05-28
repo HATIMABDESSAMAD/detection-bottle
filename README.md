@@ -163,7 +163,7 @@ source .venv/bin/activate
 ### 3️⃣ Installer les dépendances
 ```bash
 pip install --upgrade pip setuptools wheel
-pip install -r requirements.txt
+pip install -r regroupement\ des\ 3\ modeles/requirements.txt
 ```
 
 ### 4️⃣ Vérifier l'installation GPU (optionnel)
@@ -174,7 +174,7 @@ python -c "import torch; print('GPU Available:', torch.cuda.is_available())"
 ### 5️⃣ Télécharger les modèles pré-entraînés
 Les modèles doivent être placés dans les emplacements suivants :
 ```
-project_root/
+regroupement des 3 modeles/
 ├── Bottle-Bottle-Cap-Detection-System-main/
 │   └── best.pt                    (YOLOv8 Detection)
 └── remplie ou non/artifacts/models/
@@ -189,18 +189,13 @@ project_root/
 
 #### Mode Webcam
 ```bash
+cd "regroupement des 3 modeles"
 python unified_bottle_detection.py
-# Détecte et affiche les résultats
 ```
 
 #### Mode Vidéo Fichier
 ```bash
 python unified_bottle_detection.py --source video.mp4
-```
-
-#### Mode Vidéo Entrelacé (ex: caméra analogique numérisée)
-```bash
-python unified_bottle_detection.py --source video.mp4 --deinterlace
 ```
 
 #### Mode Transposition (si vidéo de travers)
@@ -218,8 +213,6 @@ self.iou = 0.5                          # NMS IoU Threshold
 self.img_size = 640                     # Taille inférence YOLO
 self.process_every_n_frames = 1         # Traiter 1 sur N frames
 self.track_trail_length = 15            # Longueur des trajectoires
-self.arduino_enabled = True             # Activer Arduino
-self.arduino_baudrate = 9600            # Vitesse série
 ```
 
 ---
@@ -236,7 +229,6 @@ self.arduino_baudrate = 9600            # Vitesse série
 | **C** | 🧮 Afficher/Masquer compteurs |
 | **T** | 🛤️ Afficher/Masquer trajectoires |
 | **Q / ESC** | ❌ Quitter l'application |
-| **MOUSE CLICK** | 🖱️ Activer enregistrement vidéo (bouton) |
 
 ---
 
@@ -249,35 +241,28 @@ detection-bottle/
 ├── 📄 LICENSE                             # Licence MIT
 ├── 📄 CONTRIBUTING.md                     # Guide contribution
 ├── 📄 CHANGELOG.md                        # Historique des versions
-├── 📄 requirements.txt                    # Dépendances Python
 │
-├── 🐍 unified_bottle_detection.py        # Script principal
-├── 🐍 debug_run.py                       # Utilitaire debug
-├── 🐍 import_serial.py                   # Gestion communication série
-│
-├── 📁 Bottle-Bottle-Cap-Detection-System-main/
-│   ├── best.pt                           # Modèle YOLO v8 (Détection)
-│   ├── detection.py                      # Utilities détection
-│   └── README.md                         # Doc modèle détection
-│
-├── 📁 remplie ou non/
-│   ├── train_resnet50v2.py              # Script entraînement CNN
-│   ├── evaluate_metrics.py               # Évaluation modèle
-│   └── artifacts/models/
-│       └── best_resnet50v2.keras        # Modèle ResNet50v2 (Classification)
-│
-├── 📁 data_logs/                         # Données collectées
-│   ├── realtime_status.json              # Logs temps réel (JSON)
-│   └── detection_unifie.csv              # Historique (CSV)
-│
-├── 📁 results/                           # Sorties
-│   ├── bottle_boxes/                     # Crops bouteilles détectées
-│   └── [autres résultats]
-│
-├── 📁 screenshots/                       # Captures d'écran
-├── 📁 videos/                            # Vidéos enregistrées
-└── 📁 .venv/                             # Environnement virtuel
-
+└── 📁 regroupement des 3 modeles/
+    ├── 📄 requirements.txt                # Dépendances Python
+    ├── 🐍 unified_bottle_detection.py    # Script principal
+    ├── 🐍 debug_run.py                   # Utilitaire debug
+    ├── 🐍 import_serial.py               # Gestion communication série
+    │
+    ├── 📁 Bottle-Bottle-Cap-Detection-System-main/
+    │   ├── best.pt                       # Modèle YOLO v8
+    │   ├── detection.py                  # Utilities détection
+    │   └── README.md                     # Doc modèle détection
+    │
+    ├── 📁 remplie ou non/
+    │   ├── train_resnet50v2.py          # Script entraînement
+    │   ├── evaluate_metrics.py           # Évaluation modèle
+    │   └── artifacts/models/
+    │       └── best_resnet50v2.keras    # Modèle ResNet50v2
+    │
+    ├── 📁 data_logs/                    # Données collectées
+    ├── 📁 results/                      # Sorties
+    ├── 📁 screenshots/                  # Captures d'écran
+    └── 📁 videos/                       # Vidéos enregistrées
 ```
 
 ---
@@ -286,44 +271,22 @@ detection-bottle/
 
 ### Configuration Arduino
 
-#### 1. Détecter le port automatiquement
 ```python
-self.init_arduino()  # Détecte COM3, COM4, etc. automatiquement
-```
+# Détection automatique du port
+self.init_arduino()
 
-#### 2. Spécifier le port manuellement
-```python
+# Ou spécifier manuellement
 self.arduino_port = "COM3"  # Windows
-# OU
 self.arduino_port = "/dev/ttyUSB0"  # Linux
 ```
 
-#### 3. Format du message Arduino
-```python
-# Format envoyé à Arduino:
-# "BOTTLE_COUNT:5|FILLED:3|EMPTY:2|CAPS_WITH:4|CAPS_WITHOUT:1|FPS:25"
-```
-
-### Ajustement Confidences
-
-```python
-# Détection (YOLO) - Plus bas = Plus de détections
-self.confidence_detection = 0.5  # 50% confiance minimum
-
-# Classification (CNN) - Plus bas = Plus de votes requis
-self.confidence_segmentation = 0.3  # 30% confiance
-```
-
-### Optimization GPU
+### Optimisation GPU
 
 ```python
 # Taille d'inférence pour YOLO
 self.img_size = 640  # Recommandé pour GPU
 # OU
-self.img_size = 416  # Plux rapide mais moins précis
-
-# Mode batch (si multi-GPU)
-self.model_detection = YOLO(model_path, device=[0, 1])
+self.img_size = 416  # Plus rapide mais moins précis
 ```
 
 ---
@@ -339,83 +302,14 @@ self.model_detection = YOLO(model_path, device=[0, 1])
   "total_bottles": 5,
   "bottles_filled": 3,
   "bottles_empty": 2,
-  "bottles_with_caps": 4,
-  "bottles_without_caps": 1,
-  "detected_objects": [
-    {
-      "track_id": 1,
-      "class": "Bottle",
-      "confidence": 0.95,
-      "bbox": [100, 50, 250, 300],
-      "fill_status": "REMPLIE",
-      "fill_percentage": 75.2,
-      "cap_status": "AVEC BOUCHON"
-    }
-  ]
+  "detected_objects": [...]
 }
 ```
 
 ### Format CSV (detection_unifie.csv)
 ```csv
-Timestamp,Frame,BottleID,Class,Confidence,X1,Y1,X2,Y2,FillStatus,FillPercentage,CapStatus
-2024-05-28 14:23:45.123,1523,1,Bottle,0.95,100,50,250,300,REMPLIE,75.2,AVEC BOUCHON
-2024-05-28 14:23:46.145,1525,2,Avec Bouchon,0.88,400,100,520,400,VIDE,0.0,AVEC BOUCHON
-```
-
----
-
-## 🤖 Communication Arduino
-
-### Protocole de communication
-
-#### 1. Initialisation
-```
-Arduino → Python: "READY"
-Python → Arduino: "INIT"
-```
-
-#### 2. Envoi de données (toutes les 5 sec)
-```
-Python → Arduino: "DATA:5|3|2|4|1|25"
-                   └─ Count|Filled|Empty|WithCap|WithoutCap|FPS
-```
-
-#### 3. Commande Broyage
-```
-Python → Arduino: "ACC"            # Démarrer broyage
-Arduino → Python: "Finished"       # Broyage terminé
-Python calcule : duration_ms
-```
-
-### Code Arduino exemple
-```cpp
-#include <Wire.h>
-
-const int RELAY_PIN = 8;
-
-void setup() {
-  Serial.begin(9600);
-  pinMode(RELAY_PIN, OUTPUT);
-  digitalWrite(RELAY_PIN, LOW);
-  Serial.println("READY");
-}
-
-void loop() {
-  if (Serial.available()) {
-    String cmd = Serial.readStringUntil('\n');
-    
-    if (cmd == "ACC") {
-      digitalWrite(RELAY_PIN, HIGH);  // Activer broyeur
-      delay(5000);
-      digitalWrite(RELAY_PIN, LOW);   // Arrêter
-      Serial.println("Finished");
-    }
-    else if (cmd.startsWith("DATA:")) {
-      // Traiter les données
-      Serial.println("ACK");
-    }
-  }
-}
+Timestamp,Frame,BottleID,Class,Confidence,FillStatus,CapStatus
+2024-05-28 14:23:45.123,1523,1,Bottle,0.95,REMPLIE,AVEC BOUCHON
 ```
 
 ---
@@ -431,7 +325,6 @@ void loop() {
 | **Latence YOLO** | ~30ms |
 | **Latence CNN** | ~15ms |
 | **Mémoire GPU** | ~2.1 GB |
-| **Temps Démarrage** | ~3-5s |
 
 ### Benchmarks (CPU: Intel i7-11700K)
 
@@ -440,13 +333,6 @@ void loop() {
 | **FPS (Détection)** | 8-12 |
 | **FPS (Classification)** | 15-20 |
 | **Mémoire RAM** | ~1.8 GB |
-
-### Optimisations appliquées
-- ✅ Cache layer pour frames
-- ✅ GPU batch processing
-- ✅ Frame skipping adaptatif
-- ✅ Temporary smoothing (hystérésis)
-- ✅ Efficient tracking (Byte-Track)
 
 ---
 
@@ -459,52 +345,15 @@ pip install --upgrade torch torchvision torchaudio --index-url https://download.
 
 ### ❌ Erreur: "CUDA out of memory"
 ```python
-# Réduire la taille d'inférence
-self.img_size = 416  # Au lieu de 640
-```
-
-### ❌ Erreur: "Modèle non trouvé"
-```bash
-# Vérifier le chemin des modèles
-ls "Bottle-Bottle-Cap-Detection-System-main/best.pt"
-ls "remplie ou non/artifacts/models/best_resnet50v2.keras"
+self.img_size = 416  # Réduire la taille
 ```
 
 ### ❌ FPS très bas (< 5 FPS)
 ```python
-# 1. Vérifier si GPU est utilisé
-print(device)  # Doit être 'cuda'
-
-# 2. Activer le skip de frames
-self.process_every_n_frames = 2  # Traiter 1 sur 2
-
-# 3. Réduire la résolution
+# Vérifier GPU utilisé et réduire résolution
+self.process_every_n_frames = 2
 self.img_size = 416
 ```
-
-### ❌ Arduino ne se connecte pas
-```bash
-# Lister les ports
-python -m serial.tools.list_ports
-# Définir manuellement
-self.arduino_port = "COM3"  # ou /dev/ttyUSB0
-```
-
-### ❌ Trajectoires oscillantes
-```python
-# Augmenter le lissage temporel
-self.fill_history[track_id].maxlen = 30  # Au lieu de 15
-```
-
----
-
-## 📚 Références et Ressources
-
-- 📖 [YOLOv8 Documentation](https://docs.ultralytics.com)
-- 📖 [PyTorch](https://pytorch.org)
-- 📖 [TensorFlow/Keras](https://www.tensorflow.org)
-- 📖 [OpenCV](https://docs.opencv.org)
-- 🎓 [ResNet Paper](https://arxiv.org/abs/1512.03385)
 
 ---
 
@@ -527,49 +376,13 @@ Ce projet est sous licence **MIT** - voir [LICENSE](LICENSE) pour détails.
 
 **Copyright © 2024 HATIM ABDESSAMAD**
 
-```
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction...
-```
-
 ---
 
 ## 📞 Support et Contact
 
-- 📧 Email: [hatim.abdessamad@email.com]
+- 📧 Email: hatim.abdessamad@email.com
 - 🐛 Issues: [GitHub Issues](https://github.com/HATIMABDESSAMAD/detection-bottle/issues)
 - 💬 Discussions: [GitHub Discussions](https://github.com/HATIMABDESSAMAD/detection-bottle/discussions)
-
----
-
-## 🎯 Roadmap (v1.1+)
-
-- [ ] Support multi-GPU
-- [ ] Web Dashboard (Flask/Dash)
-- [ ] Quantization et optimisation ONNX
-- [ ] Suport Android/iOS
-- [ ] Amélioration robustesse temps réel
-- [ ] Calibration automatique caméra
-- [ ] Export modèles à d'autres formats
-
----
-
-## 📸 Galerie
-
-[Screenshots et vidéos de démonstration]
-
-```
-┌──────────────────────────────────────────────────────┐
-│  LIVE DETECTION & CLASSIFICATION                    │
-│                                                      │
-│  FPS: 32.5 │ Bottles: 5 │ Filled: 3 │ Empty: 2    │
-│                                                      │
-│  [YOLO Detection]      │  [CNN Classification]      │
-│  Bbox + Classes        │  Remplie/Vide Status      │
-│                                                      │
-└──────────────────────────────────────────────────────┘
-```
 
 ---
 
