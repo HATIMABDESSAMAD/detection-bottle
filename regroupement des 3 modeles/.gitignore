@@ -54,9 +54,6 @@ Thumbs.db
 # Logs and outputs
 *.log
 runs/
-results/
-screenshots/
-videos/
 
 # TensorFlow events
 events.out.tfevents.*
